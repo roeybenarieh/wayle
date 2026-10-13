@@ -5,6 +5,7 @@ use tracing::warn;
 use wayle_audio::{
     AudioService,
     core::device::{input::InputDevice, output::OutputDevice},
+    types::device::DevicePort,
 };
 
 use super::{
@@ -58,14 +59,31 @@ impl DevicePicker {
         kind: VolumeSectionKind,
     ) -> Vec<DeviceInfo> {
         match kind {
-            VolumeSectionKind::Output => {
-                build_output_device_list(&audio.output_devices.get(), &audio.default_output.get())
-            }
+            VolumeSectionKind::Output => build_output_device_list(
+                &visible_output_devices(&audio.output_devices.get()),
+                &audio.default_output.get(),
+            ),
             VolumeSectionKind::Input => {
                 build_input_device_list(&audio.input_devices.get(), &audio.default_input.get())
             }
         }
     }
+}
+
+/// Outputs shown in the picker, in row order.
+///
+/// Outputs whose ports are all unavailable (e.g. HDMI/DisplayPort with nothing
+/// connected) are hidden. Portless outputs, such as virtual sinks, stay visible.
+pub(super) fn visible_output_devices(devices: &[Arc<OutputDevice>]) -> Vec<Arc<OutputDevice>> {
+    devices
+        .iter()
+        .filter(|device| has_available_port(&device.ports.get()))
+        .cloned()
+        .collect()
+}
+
+fn has_available_port(ports: &[DevicePort]) -> bool {
+    ports.is_empty() || ports.iter().any(|port| port.available)
 }
 
 pub(super) fn build_output_device_list(
@@ -115,4 +133,33 @@ pub(super) fn build_input_device_list(
                 .is_some_and(|default_device| default_device.key == device.key),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn port(available: bool) -> DevicePort {
+        DevicePort {
+            name: String::new(),
+            description: String::new(),
+            priority: 0,
+            available,
+        }
+    }
+
+    #[test]
+    fn portless_outputs_are_available() {
+        assert!(has_available_port(&[]));
+    }
+
+    #[test]
+    fn outputs_with_only_unavailable_ports_are_hidden() {
+        assert!(!has_available_port(&[port(false), port(false)]));
+    }
+
+    #[test]
+    fn outputs_with_any_available_port_are_shown() {
+        assert!(has_available_port(&[port(false), port(true)]));
+    }
 }

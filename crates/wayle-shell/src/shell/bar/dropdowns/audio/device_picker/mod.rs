@@ -85,7 +85,10 @@ impl Component for DevicePicker {
 
         let initial_list = Self::build_device_list(&init.audio, init.kind);
         let (cached_output, cached_input) = match init.kind {
-            VolumeSectionKind::Output => (init.audio.output_devices.get(), Vec::new()),
+            VolumeSectionKind::Output => (
+                methods::visible_output_devices(&init.audio.output_devices.get()),
+                Vec::new(),
+            ),
             VolumeSectionKind::Input => (Vec::new(), init.audio.input_devices.get()),
         };
 
@@ -126,7 +129,8 @@ impl Component for DevicePicker {
             DevicePickerCmd::DevicesChanged(list) => {
                 match self.kind {
                     VolumeSectionKind::Output => {
-                        self.cached_output_devices = self.audio.output_devices.get();
+                        self.cached_output_devices =
+                            methods::visible_output_devices(&self.audio.output_devices.get());
                     }
                     VolumeSectionKind::Input => {
                         self.cached_input_devices = self.audio.input_devices.get();
